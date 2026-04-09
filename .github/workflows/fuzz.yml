@@ -1,0 +1,22 @@
+name: Fuzz
+
+on:
+  workflow_dispatch:
+    inputs:
+      should_fail:
+        description: "Fail this run"
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate result
+        run: |
+          if [ "${{ inputs.should_fail }}" = "true" ]; then
+            echo "Simulated failure"
+            exit 1
+          fi
+          echo "Simulated success"
