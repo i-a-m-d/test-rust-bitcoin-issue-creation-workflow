@@ -95,7 +95,7 @@ jobs:
                 "",
                 historyBlock,
                 "",
-                "",
+                `<br>`,
                 `> **Note**: _This issue body is (re)generated automatically. Please use the comments for discussion._`,
                 "",
                 encodeMeta(meta),
