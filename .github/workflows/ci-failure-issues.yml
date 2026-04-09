@@ -11,7 +11,6 @@ on:
       - main
 
 permissions:
-  contents: read
   issues: write
 
 concurrency:
@@ -62,7 +61,7 @@ jobs:
               return `<!-- ci-failure-meta:${Buffer.from(JSON.stringify(meta), "utf8").toString("base64")} -->`;
             }
 
-            function titleFor(meta) {
+            function titleFor() {
               return `The ${workflow} workflow is failing`;
             }
 
@@ -144,10 +143,6 @@ jobs:
                 });
               } else {
                 const meta = { failures: [newFailure] };
-                meta.failures.sort((a, b) =>
-                  (a.run_number - b.run_number) ||
-                  a.created_at.localeCompare(b.created_at)
-                );
 
                 await github.rest.issues.create({
                   owner: context.repo.owner,
