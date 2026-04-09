@@ -120,8 +120,6 @@ jobs:
                 html_url: run.html_url,
                 head_sha: run.head_sha,
                 created_at: run.created_at,
-                event: run.event,
-                actor: run.actor.login,
               };
 
               if (existing) {
