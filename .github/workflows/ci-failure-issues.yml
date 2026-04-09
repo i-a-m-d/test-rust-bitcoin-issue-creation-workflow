@@ -89,10 +89,14 @@ jobs:
                 marker,
                 "",
                 `The [${workflow} workflow](${workflowUrl}) started failing on ${formatTs(first.created_at)}: [${workflow} #${first.run_number}](${first.html_url}) - [\`${shortSha(first.head_sha)}\`](${commitUrl(first.head_sha)})`,
-                "",
-                `## Failed run history`,
-                "",
-                historyBlock,
+                ...(meta.failures.length > 1
+                  ? [
+                      "",
+                      `## Failed run history`,
+                      "",
+                      historyBlock,
+                    ]
+                  : []),
                 "",
                 `<br>`,
                 `<blockquote><p><strong>Note</strong>: <em>This issue body is (re)generated automatically. Please use the comments for discussion.</em></p></blockquote>`,
