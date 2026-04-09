@@ -1,0 +1,174 @@
+name: CI Failure Issues
+
+on:
+  workflow_run:
+    workflows:
+      - Fuzz
+      - Kani CI
+    types:
+      - completed
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync-issue:
+    if: ${{ contains(fromJson('["failure","success"]'), github.event.workflow_run.conclusion) }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const workflow = run.name;
+            const branch = run.head_branch || "unknown-branch";
+            const key = `${workflow}::${branch}`;
+            const marker = `<!-- ci-failure-key:${key} -->`;
+            const metaRegex = /<!-- ci-failure-meta:([A-Za-z0-9+/=]+) -->/;
+            const workflowFiles = {
+              "Fuzz": "fuzz.yml",
+              "Kani CI": "kani.yml",
+            };
+
+            const formatTs = iso => {
+              const d = new Date(iso);
+              const pad = n => String(n).padStart(2, "0");
+              return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} at ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`;
+            };
+            const shortSha = sha => (sha || "unknown").slice(0, 7);
+            const commitUrl = sha => `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${sha}`;
+            const workflowUrl = workflowFiles[workflow]
+              ? `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/${workflowFiles[workflow]}`
+              : `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions?query=${encodeURIComponent(`workflow:"${workflow}"`)}`;
+
+            function parseMeta(body) {
+              const match = body?.match(metaRegex);
+              if (!match) return { failures: [] };
+              try {
+                return JSON.parse(Buffer.from(match[1], "base64").toString("utf8"));
+              } catch {
+                return { failures: [] };
+              }
+            }
+
+            function encodeMeta(meta) {
+              return `<!-- ci-failure-meta:${Buffer.from(JSON.stringify(meta), "utf8").toString("base64")} -->`;
+            }
+
+            function titleFor(meta) {
+              return `The ${workflow} workflow is failing`;
+            }
+
+            function renderBody(meta) {
+              const first = meta.failures[0];
+              const historyLines = meta.failures
+                .map((f, i) =>
+                  `${i + 1}. ${formatTs(f.created_at)} - [${workflow} #${f.run_number}](${f.html_url}) - [\`${shortSha(f.head_sha)}\`](${commitUrl(f.head_sha)})`
+                );
+
+              const historyBlock = historyLines.length > 5
+                ? [
+                    `<details>`,
+                    `<summary>Older runs...</summary>`,
+                    "",
+                    historyLines.slice(0, -5).join("\n"),
+                    "",
+                    `</details>`,
+                    "",
+                    historyLines.slice(-5).join("\n"),
+                  ].join("\n")
+                : historyLines.join("\n");
+
+              return [
+                marker,
+                "",
+                `The [${workflow} workflow](${workflowUrl}) started failing on ${formatTs(first.created_at)}: [${workflow} #${first.run_number}](${first.html_url}) - [\`${shortSha(first.head_sha)}\`](${commitUrl(first.head_sha)})`,
+                "",
+                `## Failed run history`,
+                "",
+                historyBlock,
+                "",
+                encodeMeta(meta),
+              ].join("\n");
+            }
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+
+            const existing = issues.find(issue =>
+              !issue.pull_request && issue.body && issue.body.includes(marker)
+            );
+
+            if (run.conclusion === "failure") {
+              const newFailure = {
+                run_id: run.id,
+                run_number: run.run_number,
+                html_url: run.html_url,
+                head_sha: run.head_sha,
+                created_at: run.created_at,
+                event: run.event,
+                actor: run.actor.login,
+              };
+
+              if (existing) {
+                const meta = parseMeta(existing.body);
+                const alreadyRecorded = meta.failures.some(f => f.run_id === run.id);
+
+                if (!alreadyRecorded) {
+                  meta.failures.push(newFailure);
+                }
+
+                meta.failures.sort((a, b) =>
+                  (a.run_number - b.run_number) ||
+                  a.created_at.localeCompare(b.created_at)
+                );
+
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  title: titleFor(meta),
+                  body: renderBody(meta),
+                });
+              } else {
+                const meta = { failures: [newFailure] };
+                meta.failures.sort((a, b) =>
+                  (a.run_number - b.run_number) ||
+                  a.created_at.localeCompare(b.created_at)
+                );
+
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: titleFor(meta),
+                  body: renderBody(meta),
+                });
+              }
+            }
+
+            if (run.conclusion === "success" && existing) {
+              const meta = parseMeta(existing.body);
+              const first = meta.failures[0];
+              const count = meta.failures.length;
+              const sinceText = first ? formatTs(first.created_at) : "an earlier time";
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `The [${workflow} workflow](${workflowUrl}) successfully ran again on ${formatTs(run.created_at)}: [${workflow} #${run.run_number}](${run.html_url}).`,
+              });
+
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: "closed",
+              });
+            }
