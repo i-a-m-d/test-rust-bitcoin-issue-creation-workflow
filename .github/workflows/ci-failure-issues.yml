@@ -96,7 +96,7 @@ jobs:
                 historyBlock,
                 "",
                 `<br>`,
-                `> **Note**: _This issue body is (re)generated automatically. Please use the comments for discussion._`,
+                `<blockquote><p><strong>Note</strong>: <em>This issue body is (re)generated automatically. Please use the comments for discussion.</em></p></blockquote>`,
                 "",
                 encodeMeta(meta),
               ].join("\n");
