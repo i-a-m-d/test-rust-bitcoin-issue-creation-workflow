@@ -95,6 +95,8 @@ jobs:
                 "",
                 historyBlock,
                 "",
+                `<sub><em>This issue body is (re)generated automatically. Please use the comments for discussion.</em></sub>`,
+                "",
                 encodeMeta(meta),
               ].join("\n");
             }
