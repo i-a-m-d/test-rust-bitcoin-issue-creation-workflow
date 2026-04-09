@@ -7,6 +7,8 @@ on:
       - Kani CI
     types:
       - completed
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -27,8 +29,7 @@ jobs:
           script: |
             const run = context.payload.workflow_run;
             const workflow = run.name;
-            const branch = run.head_branch || "unknown-branch";
-            const key = `${workflow}::${branch}`;
+            const key = workflow;
             const marker = `<!-- ci-failure-key:${key} -->`;
             const metaRegex = /<!-- ci-failure-meta:([A-Za-z0-9+/=]+) -->/;
             const workflowFiles = {
@@ -157,11 +158,6 @@ jobs:
             }
 
             if (run.conclusion === "success" && existing) {
-              const meta = parseMeta(existing.body);
-              const first = meta.failures[0];
-              const count = meta.failures.length;
-              const sinceText = first ? formatTs(first.created_at) : "an earlier time";
-
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
