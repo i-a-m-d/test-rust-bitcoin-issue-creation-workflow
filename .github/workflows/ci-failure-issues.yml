@@ -12,6 +12,10 @@ permissions:
   contents: read
   issues: write
 
+concurrency:
+  group: ci-failure-issues-${{ github.event.workflow_run.name }}
+  cancel-in-progress: false
+
 jobs:
   sync-issue:
     if: ${{ contains(fromJson('["failure","success"]'), github.event.workflow_run.conclusion) }}
